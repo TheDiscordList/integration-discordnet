@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <PackageId>TheDiscordList.DiscordNet</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>TheDiscordList</Authors>
+    <Company>TheDiscordList</Company>
+    <Copyright>Copyright (c) 2026 TheDiscordList</Copyright>
+    <Description>Official TheDiscordList integration for Discord.Net: auto-post server count, shard heartbeats and slash commands, and verify inbound webhooks. No dependencies beyond Discord.Net.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://thediscordlist.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TheDiscordList/integration-discordnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>discord;discord-net;discord.net;discord-bot;thediscordlist;bot-list</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Discord.Net.WebSocket" Version="[3.15.0, 4.0.0)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="TheDiscordList.DiscordNet.Tests" />
+  </ItemGroup>
+
+</Project>
