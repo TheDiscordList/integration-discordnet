@@ -232,7 +232,7 @@ internal abstract class Publisher : IDisposable
         Owner.RaiseError(new(Kind, status, false, message));
     }
 
-    private void Cancel() => Change(Timeout.InfiniteTimeSpan);
+    protected void Cancel() => Change(Timeout.InfiniteTimeSpan);
 
     private void Change(TimeSpan due)
     {
@@ -526,6 +526,11 @@ internal sealed class CommandsPublisher(TdlAutoposter owner) : Publisher(owner)
         if (outcome.Kind is OutcomeKind.Transient or OutcomeKind.Dropped or OutcomeKind.Throttled or OutcomeKind.Plan)
         {
             ScheduleIfRunning(RetryDelay);
+        }
+        else if (outcome.Kind == OutcomeKind.Ok)
+        {
+            // A pending retry would only post the same list again.
+            Cancel();
         }
 
         return result;
