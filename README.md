@@ -35,7 +35,7 @@ extension method. Either starts three publishers:
 | --- | --- | --- |
 | Stats | `server_count`, `shard_count` | 5s after ready, then every 5 min, debounced on guild join/leave |
 | Heartbeat | per-shard status, latency and guild counts | every ~30s, plus an extra beat when a shard connects or disconnects, at least 10s after the last one |
-| Commands | your global application commands | once, ~10s after ready |
+| Commands | your global application commands | once, ~10s after ready; again every 5 min until it lands, after a server error, a rate limit or a failed fetch from Discord |
 
 Your **stats token** is on the listing's manage page, under the API tab. It is
 scoped to one listing, so it is the only credential this package needs.
@@ -123,6 +123,9 @@ await poster.PostHeartbeatAsync();
 
 await poster.DisposeAsync(); // stops every timer and detaches from the client
 ```
+
+`client.LogoutAsync()` pauses every publisher, and the next `Ready` after logging
+in again starts them. Manual posts stay available in between.
 
 Nothing in this package throws at your process. Timer callbacks are wrapped,
 the `PostXAsync()` methods always return a result, and a throwing event handler
@@ -229,21 +232,29 @@ enqueue time, not send time; never use it for freshness.
 - **Heartbeats need Gold or higher.** On a `403` the heartbeat publisher
   suspends and re-probes every 30 minutes rather than disabling: the plan is
   checked per request, so a bot can gain it mid-run.
-- **Rate limits are shared.** Stats and commands share 60 requests a minute per
-  bot, heartbeats get 120. A `429` suspends stats and commands together,
-  honouring `Retry-After` and `X-RateLimit-Reset` (60 seconds without either,
-  never more than an hour); heartbeats bypass the
-  suspension, because a stale number beats a false "down" on your status page.
+- **Stats and commands share a rate limit** of 60 requests a minute per bot. A
+  `429` on either suspends both, honouring `Retry-After` and `X-RateLimit-Reset`
+  (60 seconds without either, never more than an hour). Heartbeats have a limiter
+  of their own, so they neither start nor honour that suspension: a stale number
+  beats a false "down" on your status page.
 - **`404` never means "bad token".** It means the id is unknown or belongs to a
   server listing; that publisher disables itself. A `401` is the bad-token
   signal, and it disables every publisher.
 - `408`, `425`, `5xx`, timeouts (10 seconds) and network errors retry up to
   three times with jittered exponential backoff, never past the next tick. Any
   other `4xx` is reported once and not retried.
+- A scheduled post that gets a `429` retries once the window lifts, if that lands
+  before its next tick. A manual `PostXAsync()` returns `throttled` at once, so
+  awaiting it never holds a command handler for the length of the window.
 - Commands are read with `client.Rest.GetGlobalApplicationCommands()`.
   Discord.Net reads an absent `default_member_permissions` as `0`, so `0` is
   sent as absent: a command restricted to administrators by `0` shows as
   available to everyone on the listing.
+- A shard reads `connecting` before its first start and while Discord.Net
+  reconnects it. It reads `disconnected` only once Discord.Net has stopped
+  reconnecting: after `StopAsync()`, or on a close code it will not retry. That
+  state is private to Discord.Net, so the package reads it by reflection, and an
+  unreadable value counts as still reconnecting.
 - Without `GatewayIntents.Guilds`, the guild cache stops moving after READY and
   the count silently drifts.
 
@@ -257,7 +268,8 @@ enqueue time, not send time; never use it for freshness.
 
 Releases publish from `.github/workflows/release.yml` on a `v*` tag, using
 NuGet trusted publishing (OIDC through `NuGet/login`): no long-lived API key
-lives in the repository. The package version comes from the tag.
+lives in the repository. The tag must point at a commit on `main` and match
+`<Version>` in the csproj, or the workflow stops before publishing.
 
 One-time setup:
 
@@ -270,10 +282,11 @@ One-time setup:
 
 Each release:
 
-1. Move the `Unreleased` notes in `CHANGELOG.md` under the new version.
-2. `git tag v0.2.0 && git push origin v0.2.0`.
-3. The workflow tests, packs with `-p:Version=0.2.0`, exchanges its OIDC token
-   for a short-lived key, and pushes the `.nupkg` and `.snupkg`.
+1. Bump `<Version>` in the csproj and move the `Unreleased` notes in
+   `CHANGELOG.md` under the new version. Merge that to `main`.
+2. `git tag v0.2.1 && git push origin v0.2.1`.
+3. The workflow checks the tag, tests, packs with `-p:Version=0.2.1`, exchanges
+   its OIDC token for a short-lived key, and pushes the `.nupkg` and `.snupkg`.
 
 ## License
 
