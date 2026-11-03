@@ -124,6 +124,9 @@ await poster.PostHeartbeatAsync();
 await poster.DisposeAsync(); // stops every timer and detaches from the client
 ```
 
+`client.LogoutAsync()` pauses every publisher, and the next `Ready` after logging
+in again starts them. Manual posts stay available in between.
+
 Nothing in this package throws at your process. Timer callbacks are wrapped,
 the `PostXAsync()` methods always return a result, and a throwing event handler
 is logged and contained. Without a `Log` handler, warnings go to standard error;

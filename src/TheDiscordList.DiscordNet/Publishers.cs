@@ -66,6 +66,12 @@ internal abstract class Publisher : IDisposable
         }
     }
 
+    public void Pause()
+    {
+        Running = false;
+        Cancel();
+    }
+
     public void ReportUnexpected(Exception exception)
     {
         if (!Owner.Stopping.IsCancellationRequested)

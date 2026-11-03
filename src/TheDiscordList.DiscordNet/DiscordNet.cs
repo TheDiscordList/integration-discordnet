@@ -27,12 +27,14 @@ public sealed partial class TdlAutoposter
         Func<Task> connected = () => Transition();
         Func<Exception, Task> disconnected = _ => Transition();
         Func<SocketGuild, Task> guildsChanged = _ => GuildsChanged();
+        Func<Task> loggedOut = LoggedOut;
 
         client.Ready += ready;
         client.Connected += connected;
         client.Disconnected += disconnected;
         client.JoinedGuild += guildsChanged;
         client.LeftGuild += guildsChanged;
+        client.LoggedOut += loggedOut;
         _detach.Add(() =>
         {
             client.Ready -= ready;
@@ -40,6 +42,7 @@ public sealed partial class TdlAutoposter
             client.Disconnected -= disconnected;
             client.JoinedGuild -= guildsChanged;
             client.LeftGuild -= guildsChanged;
+            client.LoggedOut -= loggedOut;
         });
 
         if (client.ConnectionState == ConnectionState.Connected)
@@ -65,12 +68,14 @@ public sealed partial class TdlAutoposter
         Func<DiscordSocketClient, Task> connected = _ => Transition();
         Func<Exception, DiscordSocketClient, Task> disconnected = (_, _) => Transition();
         Func<SocketGuild, Task> guildsChanged = _ => GuildsChanged();
+        Func<Task> loggedOut = LoggedOut;
 
         client.ShardReady += ready;
         client.ShardConnected += connected;
         client.ShardDisconnected += disconnected;
         client.JoinedGuild += guildsChanged;
         client.LeftGuild += guildsChanged;
+        client.LoggedOut += loggedOut;
         _detach.Add(() =>
         {
             client.ShardReady -= ready;
@@ -78,6 +83,7 @@ public sealed partial class TdlAutoposter
             client.ShardDisconnected -= disconnected;
             client.JoinedGuild -= guildsChanged;
             client.LeftGuild -= guildsChanged;
+            client.LoggedOut -= loggedOut;
         });
 
         if (client.Shards?.Any(shard => shard.ConnectionState == ConnectionState.Connected) == true)
@@ -101,6 +107,13 @@ public sealed partial class TdlAutoposter
     private Task GuildsChanged()
     {
         OnGuildsChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Publishing pauses rather than ends: a client can log in again, and its next ready restarts it.</summary>
+    private Task LoggedOut()
+    {
+        Pause();
         return Task.CompletedTask;
     }
 

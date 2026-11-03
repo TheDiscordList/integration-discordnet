@@ -150,6 +150,15 @@ public sealed partial class TdlAutoposter : IAsyncDisposable
         _commands?.Start();
     }
 
+    /// <summary>Stops every publisher until the next <see cref="Start"/>.</summary>
+    internal void Pause()
+    {
+        Interlocked.Exchange(ref _started, 0);
+        _stats?.Pause();
+        _heartbeat?.Pause();
+        _commands?.Pause();
+    }
+
     internal void OnGuildsChanged() => _stats?.OnGuildChange();
 
     internal void OnShardTransition() => _heartbeat?.BeatSoon();

@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
 using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
+using Microsoft.Extensions.Time.Testing;
 
 namespace TheDiscordList.DiscordNet.Tests;
 
@@ -34,6 +36,34 @@ public sealed class DiscordNetTests
 
         await client.StopAsync();
         await Harness.Until(() => Assert.Single(poster.Host.Shards).Status == TdlShard.Disconnected);
+    }
+
+    [Fact]
+    public async Task LoggingOutPausesThePublishersUntilTheNextReady()
+    {
+        var http = new FakeHandler();
+        var time = new FakeTimeProvider(Harness.Epoch);
+        var options = Offline(http);
+        options.TimeProvider = time;
+        options.BotId = 123;
+        options.Stats.Enabled = false;
+        options.Commands.Enabled = false;
+        await using var client = new DiscordSocketClient();
+        await using var poster = client.AddTheDiscordList("tdl_token", options);
+        poster.Start(123);
+        await Harness.Until(() => http.To("heartbeat").Count == 1);
+
+        // Nothing here logs in, so the state is set by hand for LogoutAsync to act on it.
+        typeof(BaseDiscordClient).GetProperty(nameof(BaseDiscordClient.LoginState))!.SetValue(client, LoginState.LoggedIn);
+        await client.LogoutAsync();
+        time.Advance(TimeSpan.FromMinutes(5));
+        await Task.Delay(50);
+
+        Assert.Single(http.To("heartbeat"));
+
+        poster.Start(123);
+
+        await Harness.Until(() => http.To("heartbeat").Count == 2);
     }
 
     [Fact]
