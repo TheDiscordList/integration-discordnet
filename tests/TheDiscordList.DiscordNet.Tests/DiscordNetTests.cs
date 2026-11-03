@@ -17,8 +17,23 @@ public sealed class DiscordNetTests
         await using var poster = client.AddTheDiscordList("tdl_token", Offline());
 
         Assert.Equal(new TdlTopology(0, 1, 1, true), poster.Topology);
-        Assert.Equal(new TdlShard(0, TdlShard.Disconnected, null, 0), Assert.Single(poster.Host.Shards));
+        Assert.Equal(new TdlShard(0, TdlShard.Connecting, null, 0), Assert.Single(poster.Host.Shards));
         Assert.Null(poster.Host.LocalServerCount);
+    }
+
+    [Fact]
+    public async Task OnlyAStoppedClientReadsDisconnected()
+    {
+        await using var client = new DiscordSocketClient();
+        await using var poster = client.AddTheDiscordList("tdl_token", Offline());
+
+        // Never logged in, so every connect fails and the client sits in its reconnect loop.
+        await client.StartAsync();
+        await Harness.Until(() => client.ConnectionState == ConnectionState.Disconnected);
+        Assert.Equal(TdlShard.Connecting, Assert.Single(poster.Host.Shards).Status);
+
+        await client.StopAsync();
+        await Harness.Until(() => Assert.Single(poster.Host.Shards).Status == TdlShard.Disconnected);
     }
 
     [Fact]
@@ -38,6 +53,7 @@ public sealed class DiscordNetTests
 
         Assert.Equal(new TdlTopology(0, 1, 3, true), poster.Topology);
         Assert.Equal(new[] { 0, 1, 2 }, poster.Host.Shards.Select(shard => shard.Id));
+        Assert.All(poster.Host.Shards, shard => Assert.Equal(TdlShard.Connecting, shard.Status));
     }
 
     [Fact]

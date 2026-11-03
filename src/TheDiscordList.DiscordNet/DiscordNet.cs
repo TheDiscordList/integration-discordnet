@@ -165,6 +165,15 @@ internal sealed class DiscordNetHost(BaseSocketClient client, Func<IReadOnlyColl
     private static readonly PropertyInfo? TotalShards =
         typeof(DiscordSocketClient).GetProperty("TotalShards", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+    private static readonly FieldInfo? Connection = typeof(DiscordSocketClient).GetField("_connection", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    /// <summary>
+    /// <see cref="ConnectionState.Disconnected"/> also covers a shard that never started and the wait
+    /// between reconnect attempts. Only a cancelled reconnect loop is final: <c>StopAsync</c>, or a close
+    /// code Discord.Net will not retry. It keeps that private; unreadable means reconnecting, never a false down.
+    /// </summary>
+    private static readonly FieldInfo? ReconnectToken = Connection?.FieldType.GetField("_reconnectCancelToken", BindingFlags.Instance | BindingFlags.NonPublic);
+
     public TdlAutoposter? Poster { get; set; }
 
     public TdlTopology Topology
@@ -234,10 +243,13 @@ internal sealed class DiscordNetHost(BaseSocketClient client, Func<IReadOnlyColl
         var status = shard.ConnectionState switch
         {
             ConnectionState.Connected => TdlShard.Ready,
-            ConnectionState.Connecting => TdlShard.Connecting,
-            _ => TdlShard.Disconnected,
+            ConnectionState.Disconnected when IsStopped(shard) => TdlShard.Disconnected,
+            _ => TdlShard.Connecting,
         };
         var latency = status == TdlShard.Ready ? TdlShard.Latency(shard.Latency) : null;
         return new TdlShard(shard.ShardId, status, latency, shard.Guilds.Count);
     }
+
+    private static bool IsStopped(DiscordSocketClient shard) =>
+        Connection?.GetValue(shard) is { } connection && ReconnectToken?.GetValue(connection) is CancellationTokenSource { IsCancellationRequested: true };
 }

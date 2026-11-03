@@ -244,6 +244,11 @@ enqueue time, not send time; never use it for freshness.
   Discord.Net reads an absent `default_member_permissions` as `0`, so `0` is
   sent as absent: a command restricted to administrators by `0` shows as
   available to everyone on the listing.
+- A shard reads `connecting` before its first start and while Discord.Net
+  reconnects it. It reads `disconnected` only once Discord.Net has stopped
+  reconnecting: after `StopAsync()`, or on a close code it will not retry. That
+  state is private to Discord.Net, so the package reads it by reflection, and an
+  unreadable value counts as still reconnecting.
 - Without `GatewayIntents.Guilds`, the guild cache stops moving after READY and
   the count silently drifts.
 
