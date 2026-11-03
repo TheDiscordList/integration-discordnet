@@ -247,7 +247,7 @@ internal sealed class DiscordNetHost(BaseSocketClient client, Func<IReadOnlyColl
             _ => TdlShard.Connecting,
         };
         var latency = status == TdlShard.Ready ? TdlShard.Latency(shard.Latency) : null;
-        return new TdlShard(shard.ShardId, status, latency, shard.Guilds.Count);
+        return new TdlShard(shard.ShardId, status, latency, status == TdlShard.Ready ? shard.Guilds.Count : null);
     }
 
     private static bool IsStopped(DiscordSocketClient shard) =>
