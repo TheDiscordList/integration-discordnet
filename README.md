@@ -240,6 +240,9 @@ enqueue time, not send time; never use it for freshness.
 - `408`, `425`, `5xx`, timeouts (10 seconds) and network errors retry up to
   three times with jittered exponential backoff, never past the next tick. Any
   other `4xx` is reported once and not retried.
+- A scheduled post that gets a `429` retries once the window lifts, if that lands
+  before its next tick. A manual `PostXAsync()` returns `throttled` at once, so
+  awaiting it never holds a command handler for the length of the window.
 - Commands are read with `client.Rest.GetGlobalApplicationCommands()`.
   Discord.Net reads an absent `default_member_permissions` as `0`, so `0` is
   sent as absent: a command restricted to administrators by `0` shows as
