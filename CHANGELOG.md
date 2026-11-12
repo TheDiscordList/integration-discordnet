@@ -19,8 +19,13 @@
 - A heartbeat `429` no longer suspends stats and commands.
 - `client.LogoutAsync()` pauses the publishers; the next `Ready` starts them again.
 - A burst of shard transitions can no longer postpone the heartbeat.
-- The release workflow pins its actions to commit SHAs and refuses a tag that is
-  not on `main` or does not match the csproj version.
+- The release workflow refuses a tag that is not on `main` or does not match the
+  csproj version.
+- CI and release run on `actions/checkout` v7 and `actions/setup-dotnet` v6,
+  referenced by version tag. Dependabot keeps them current.
+- Tests run against Discord.Net 3.20.2, Microsoft.NET.Test.Sdk 18.11.0,
+  xunit.runner.visualstudio 4.0.1 and Microsoft.Extensions.TimeProvider.Testing
+  10.11.0. The package's own dependencies are unchanged.
 
 ## 0.2.0
 
