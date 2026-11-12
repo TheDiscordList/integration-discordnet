@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
 using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
+using Microsoft.Extensions.Time.Testing;
 
 namespace TheDiscordList.DiscordNet.Tests;
 
@@ -17,8 +19,51 @@ public sealed class DiscordNetTests
         await using var poster = client.AddTheDiscordList("tdl_token", Offline());
 
         Assert.Equal(new TdlTopology(0, 1, 1, true), poster.Topology);
-        Assert.Equal(new TdlShard(0, TdlShard.Disconnected, null, 0), Assert.Single(poster.Host.Shards));
+        Assert.Equal(new TdlShard(0, TdlShard.Connecting, null, null), Assert.Single(poster.Host.Shards));
         Assert.Null(poster.Host.LocalServerCount);
+    }
+
+    [Fact]
+    public async Task OnlyAStoppedClientReadsDisconnected()
+    {
+        await using var client = new DiscordSocketClient();
+        await using var poster = client.AddTheDiscordList("tdl_token", Offline());
+
+        // Never logged in, so every connect fails and the client sits in its reconnect loop.
+        await client.StartAsync();
+        await Harness.Until(() => client.ConnectionState == ConnectionState.Disconnected);
+        Assert.Equal(TdlShard.Connecting, Assert.Single(poster.Host.Shards).Status);
+
+        await client.StopAsync();
+        await Harness.Until(() => Assert.Single(poster.Host.Shards).Status == TdlShard.Disconnected);
+    }
+
+    [Fact]
+    public async Task LoggingOutPausesThePublishersUntilTheNextReady()
+    {
+        var http = new FakeHandler();
+        var time = new FakeTimeProvider(Harness.Epoch);
+        var options = Offline(http);
+        options.TimeProvider = time;
+        options.BotId = 123;
+        options.Stats.Enabled = false;
+        options.Commands.Enabled = false;
+        await using var client = new DiscordSocketClient();
+        await using var poster = client.AddTheDiscordList("tdl_token", options);
+        poster.Start(123);
+        await Harness.Until(() => http.To("heartbeat").Count == 1);
+
+        // Nothing here logs in, so the state is set by hand for LogoutAsync to act on it.
+        typeof(BaseDiscordClient).GetProperty(nameof(BaseDiscordClient.LoginState))!.SetValue(client, LoginState.LoggedIn);
+        await client.LogoutAsync();
+        time.Advance(TimeSpan.FromMinutes(5));
+        await Task.Delay(50);
+
+        Assert.Single(http.To("heartbeat"));
+
+        poster.Start(123);
+
+        await Harness.Until(() => http.To("heartbeat").Count == 2);
     }
 
     [Fact]
@@ -38,6 +83,7 @@ public sealed class DiscordNetTests
 
         Assert.Equal(new TdlTopology(0, 1, 3, true), poster.Topology);
         Assert.Equal(new[] { 0, 1, 2 }, poster.Host.Shards.Select(shard => shard.Id));
+        Assert.All(poster.Host.Shards, shard => Assert.Equal(TdlShard.Connecting, shard.Status));
     }
 
     [Fact]
