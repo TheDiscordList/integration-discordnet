@@ -27,12 +27,14 @@ public sealed partial class TdlAutoposter
         Func<Task> connected = () => Transition();
         Func<Exception, Task> disconnected = _ => Transition();
         Func<SocketGuild, Task> guildsChanged = _ => GuildsChanged();
+        Func<Task> loggedOut = LoggedOut;
 
         client.Ready += ready;
         client.Connected += connected;
         client.Disconnected += disconnected;
         client.JoinedGuild += guildsChanged;
         client.LeftGuild += guildsChanged;
+        client.LoggedOut += loggedOut;
         _detach.Add(() =>
         {
             client.Ready -= ready;
@@ -40,6 +42,7 @@ public sealed partial class TdlAutoposter
             client.Disconnected -= disconnected;
             client.JoinedGuild -= guildsChanged;
             client.LeftGuild -= guildsChanged;
+            client.LoggedOut -= loggedOut;
         });
 
         if (client.ConnectionState == ConnectionState.Connected)
@@ -65,12 +68,14 @@ public sealed partial class TdlAutoposter
         Func<DiscordSocketClient, Task> connected = _ => Transition();
         Func<Exception, DiscordSocketClient, Task> disconnected = (_, _) => Transition();
         Func<SocketGuild, Task> guildsChanged = _ => GuildsChanged();
+        Func<Task> loggedOut = LoggedOut;
 
         client.ShardReady += ready;
         client.ShardConnected += connected;
         client.ShardDisconnected += disconnected;
         client.JoinedGuild += guildsChanged;
         client.LeftGuild += guildsChanged;
+        client.LoggedOut += loggedOut;
         _detach.Add(() =>
         {
             client.ShardReady -= ready;
@@ -78,6 +83,7 @@ public sealed partial class TdlAutoposter
             client.ShardDisconnected -= disconnected;
             client.JoinedGuild -= guildsChanged;
             client.LeftGuild -= guildsChanged;
+            client.LoggedOut -= loggedOut;
         });
 
         if (client.Shards?.Any(shard => shard.ConnectionState == ConnectionState.Connected) == true)
@@ -101,6 +107,13 @@ public sealed partial class TdlAutoposter
     private Task GuildsChanged()
     {
         OnGuildsChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Publishing pauses rather than ends: a client can log in again, and its next ready restarts it.</summary>
+    private Task LoggedOut()
+    {
+        Pause();
         return Task.CompletedTask;
     }
 
@@ -164,6 +177,15 @@ internal sealed class DiscordNetHost(BaseSocketClient client, Func<IReadOnlyColl
     /// <summary>Discord.Net keeps the total shard count internal. Unreadable means unknown, never a guess.</summary>
     private static readonly PropertyInfo? TotalShards =
         typeof(DiscordSocketClient).GetProperty("TotalShards", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+    private static readonly FieldInfo? Connection = typeof(DiscordSocketClient).GetField("_connection", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    /// <summary>
+    /// <see cref="ConnectionState.Disconnected"/> also covers a shard that never started and the wait
+    /// between reconnect attempts. Only a cancelled reconnect loop is final: <c>StopAsync</c>, or a close
+    /// code Discord.Net will not retry. It keeps that private; unreadable means reconnecting, never a false down.
+    /// </summary>
+    private static readonly FieldInfo? ReconnectToken = Connection?.FieldType.GetField("_reconnectCancelToken", BindingFlags.Instance | BindingFlags.NonPublic);
 
     public TdlAutoposter? Poster { get; set; }
 
@@ -234,10 +256,13 @@ internal sealed class DiscordNetHost(BaseSocketClient client, Func<IReadOnlyColl
         var status = shard.ConnectionState switch
         {
             ConnectionState.Connected => TdlShard.Ready,
-            ConnectionState.Connecting => TdlShard.Connecting,
-            _ => TdlShard.Disconnected,
+            ConnectionState.Disconnected when IsStopped(shard) => TdlShard.Disconnected,
+            _ => TdlShard.Connecting,
         };
         var latency = status == TdlShard.Ready ? TdlShard.Latency(shard.Latency) : null;
-        return new TdlShard(shard.ShardId, status, latency, shard.Guilds.Count);
+        return new TdlShard(shard.ShardId, status, latency, status == TdlShard.Ready ? shard.Guilds.Count : null);
     }
+
+    private static bool IsStopped(DiscordSocketClient shard) =>
+        Connection?.GetValue(shard) is { } connection && ReconnectToken?.GetValue(connection) is CancellationTokenSource { IsCancellationRequested: true };
 }
